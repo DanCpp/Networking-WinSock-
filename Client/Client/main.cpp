@@ -5,6 +5,7 @@
 #include <WinSock2.h>
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <string>
+#include <conio.h>
 
 #pragma warning(disable: 4996)
 
@@ -12,16 +13,55 @@ SOCKET Connection;
 
 enum Packet
 {
-    ChatMessage,
-    Test,
+    Message,
     File,
+    EXIT,
 };
+
+bool Exit(Packet packettype)
+{
+    if (packettype != File and packettype != Message) return true;
+    else return false;
+}
+
+
+void FileReceive(char* recvbuf, int recvbuflen)
+{
+    std::ofstream out("out.txt", std::ios::binary);
+    if (out.is_open())
+    {
+        out.write(recvbuf, recvbuflen);
+    }
+    out.close();
+}
+
+Packet choicePacket()
+{
+    while (true)
+    {
+        if (kbhit())
+        {
+            switch (getch())
+            {
+            case 'm':
+                return Message;
+            case 'f':
+                return File;
+            case 'M':
+                return Message;
+            case 'F':
+                return File;
+            }
+        }
+    }
+    throw ExceptionContinueSearch;
+}
 
 bool ProcessPacket(Packet packettype)
 {
     switch (packettype)
     {
-    case ChatMessage:
+    case Message:
     {
         int msg_size;
         recv(Connection, (char*)&msg_size, sizeof(int), NULL);
@@ -29,13 +69,19 @@ bool ProcessPacket(Packet packettype)
         msg[msg_size] = '\0';
         recv(Connection, msg, msg_size, NULL);
         std::cout << msg << std::endl;
+        delete[] msg;
         break;
     }
-    case Test:
-        std::cout << "Test packet\n";
-        break;
     case File:
+    {
+        int recvbuflen;
+        recv(Connection, (char*)&recvbuflen, sizeof(int), NULL);
+        char* recvbuf = new char[recvbuflen + 1]; recvbuf[recvbuflen] = '\0';
+        recv(Connection, recvbuf, recvbuflen, NULL);
+        FileReceive(recvbuf, recvbuflen);
+        delete[] recvbuf;
         break;
+    }
     default:
         std::cout << "Unrecognized packet: " << packettype << std::endl;
         return false;
@@ -55,16 +101,6 @@ void ClientHandler()
         }
     }
     closesocket(Connection);
-}
-
-std::ofstream out("E:/Programming/C++/MyProjects/Network/out.exe", std::ios::binary);
-void FileReceive(char* recvbuf, int recvbuflen)
-{
-    if (out.is_open())
-    {
-        out.write(recvbuf, recvbuflen);
-        memset(&recvbuf, (int)recvbuf, recvbuflen);
-}
 }
 
 int main(int argc, char* argv[])
@@ -87,21 +123,29 @@ int main(int argc, char* argv[])
         std::cout << "Error: failed connect to server" << std::endl;
         return 1;
     }
-    std::cout << "Conncted!\n";
+    std::cout << "Connected!\n";
 
     CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)ClientHandler, NULL, NULL, NULL);
 
-    std::string send_msg;
     while (true)
     {
-        std::getline(std::cin, send_msg);
-        int msg_size = send_msg.size();
-        Packet packettype = ChatMessage;
+        std::cout << "Set packettype 'f' - File; 'm' - Message\n";
+        Packet packettype = choicePacket();
+        std::cout << "Your text\n";
+        std::string msg;
+        std::getline(std::cin, msg);
+        int msg_size = msg.size();
+        if (Exit(packettype)) {
+            packettype = EXIT;
+            send(Connection, (char*)&packettype, sizeof(Packet), NULL);
+            closesocket(Connection);
+            exit(0);
+        }
         send(Connection, (char*)&packettype, sizeof(Packet), NULL);
         send(Connection, (char*)&msg_size, sizeof(int), NULL);
-        send(Connection, send_msg.c_str(), msg_size, NULL);
-        Sleep(10);
+        send(Connection, msg.c_str(), msg_size, NULL);
     }
+    if (Connection) closesocket(Connection);
     WSACleanup();
     system("pause");
     return 0;

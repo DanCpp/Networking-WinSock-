@@ -2,6 +2,7 @@
 #include <fstream>
 #pragma comment(lib, "ws2_32.lib")
 #include <WinSock2.h>
+#include <stdio.h>
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #pragma warning(disable: 4996)
 
@@ -12,17 +13,46 @@ int Counterclients = 0;
 
 enum Packet
 {
-	ChatMessage = 0,
-    Test,
-	File,
+    Message,
+    File,
+    EXIT
 };
 
+std::ifstream::pos_type filesize(const char* filename)
+{
+    std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
+    std::ifstream::pos_type len = in.tellg();
+    in.close();
+    return len;
+}
+
+void FileSend(char* FilePath, int index)
+{
+    std::ifstream in(FilePath, std::ios::binary);
+    int sendbuflen = filesize(FilePath);
+    char* sendbuf = new char[sendbuflen + 1];
+    if (in.is_open())
+    {
+        in.seekg(0, std::ios::beg);
+        in.read(sendbuf, sendbuflen);
+        for (int i = 0; i < Counterclients; i++)
+        {
+            if (i == index) continue;
+            Packet packet_file = File;
+            send(Connections[i], (char*)&packet_file, sizeof(Packet), NULL);
+            send(Connections[i], (char*)&sendbuflen, sizeof(int), NULL);
+            send(Connections[i], sendbuf, sendbuflen, NULL);
+        }
+        in.close();
+    }
+
+}
 
 bool ProcessPacket(int index, Packet packettype)
 {
     switch (packettype)
     {
-    case ChatMessage:
+    case Message:
     {
         int msg_size;
         recv(Connections[index], (char*)&msg_size, sizeof(int), NULL);
@@ -32,7 +62,7 @@ bool ProcessPacket(int index, Packet packettype)
         for (int i = 0; i < Counterclients; i++)
         {
             if (i == index) continue;
-            Packet msg_Packet = ChatMessage;
+            Packet msg_Packet = Message;
             send(Connections[i], (char*)&msg_Packet, sizeof(Packet), NULL);
             send(Connections[i], (char*)&msg_size, sizeof(int), NULL);
             send(Connections[i], msg, msg_size, NULL);
@@ -41,7 +71,19 @@ bool ProcessPacket(int index, Packet packettype)
         break;
     }
     case File:
+    {
+        int pthlen;
+        recv(Connections[index], (char*)&pthlen, sizeof(int), NULL);
+        char* path = new char[pthlen + 1]; path[pthlen] = '\0';
+        recv(Connections[index], path, pthlen, NULL);
+        FileSend(path, index);
         break;
+    }
+    case EXIT:
+        closesocket(Connections[index]);
+        Counterclients--;
+        Connections[index] = NULL;
+        return false;
     default:
         std::cout << "Unreconigzed packet: " << packettype << std::endl;
         return false;
@@ -63,32 +105,6 @@ void ClientHandler(int index)
     closesocket(Connections[index]);
 }
 
-void FileSend(SOCKET FileSendSocket, char* FilePath, char* sendbuf, int sendbuflen)
-{
-    std::streampos filesize = 0;
-    std::ifstream in(FilePath, std::ios::binary);
-    memset(&sendbuf, (int)sendbuf, sendbuflen);
-    if (in.is_open())
-    {
-        while (1)
-        {
-            in.read(sendbuf, sendbuflen);
-            if (in.eof())
-            {
-                std::cout << "End of File sending from Client" << std::endl;
-                in.close();
-                break;
-            }
-            else
-            {
-                send(FileSendSocket, sendbuf, sendbuflen, 0);
-                memset(&sendbuf, (int)sendbuf, sendbuflen);
-            }
-        }
-    }
-
-}
-
 int main(int argc, char* argv[])
 {
     //WSAStartup
@@ -108,7 +124,8 @@ int main(int argc, char* argv[])
     bind(sListen, (SOCKADDR*)&addr, sizeof(addr));
     listen(sListen, SOMAXCONN);
     SOCKET newConnection;
-    for (int i = 0; i < 100; i++)
+
+    for (int i = 0; i < COUNTCONN; i++)
     {
         newConnection = accept(sListen, (SOCKADDR*)&addr, &size);
         if (newConnection == 0) {
@@ -117,20 +134,12 @@ int main(int argc, char* argv[])
         else
         {
             std::cout << "Client Connected!" << std::endl;
-            //std::string msg = "Hello. It's my first network program";
-            //int msg_size = msg.size();
-            //Packet msg_Packet = ChatMessage;
-            //send(newConnection, (char*)&msg_Packet, sizeof(Packet), NULL);
-            //send(newConnection, (char*)&msg_size, sizeof(int), NULL);
-            //send(newConnection, msg.c_str(), msg_size, NULL);
-
             Connections[i] = newConnection;
             Counterclients++;
             CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)ClientHandler, (LPVOID)(i), NULL, NULL);
-            Packet test = Test;
-            send(newConnection, (char*)&test, sizeof(Packet), NULL);
         }
     }
+
     WSACleanup();
     system("pause");
     return 0;
