@@ -79,13 +79,11 @@ bool ProcessPacket(int index, Packet packettype)
         FileSend(path, index);
         break;
     }
-    case EXIT:
+    default:
+        std::cout << "Client " << index << " disconnected!" << std::endl;
         closesocket(Connections[index]);
         Counterclients--;
         Connections[index] = NULL;
-        return false;
-    default:
-        std::cout << "Unreconigzed packet: " << packettype << std::endl;
         return false;
     }
     return true;
