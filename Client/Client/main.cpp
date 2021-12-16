@@ -25,9 +25,9 @@ bool Exit(Packet packettype)
 }
 
 
-void FileReceive(char* recvbuf, int recvbuflen)
+void FileReceive(char* recvbuf, int recvbuflen, char* format)
 {
-    std::ofstream out("out.txt", std::ios::binary);
+    std::ofstream out("out" + (std::string)format, std::ios::binary);
     if (out.is_open())
     {
         out.write(recvbuf, recvbuflen);
@@ -74,12 +74,15 @@ bool ProcessPacket(Packet packettype)
     }
     case File:
     {
-        int recvbuflen;
+        int recvbuflen, sizeformat;
+        recv(Connection, (char*)&sizeformat, sizeof(int), NULL);
+        char* format = new char[sizeformat + 1]; format[sizeformat] = '\0';
+        recv(Connection, format, sizeformat, NULL);
         recv(Connection, (char*)&recvbuflen, sizeof(int), NULL);
         char* recvbuf = new char[recvbuflen + 1]; recvbuf[recvbuflen] = '\0';
         recv(Connection, recvbuf, recvbuflen, NULL);
-        FileReceive(recvbuf, recvbuflen);
-        delete[] recvbuf;
+        FileReceive(recvbuf, recvbuflen, format);
+        delete[] recvbuf, format;
         break;
     }
     default:
@@ -142,6 +145,15 @@ int main(int argc, char* argv[])
             exit(0);
         }
         send(Connection, (char*)&packettype, sizeof(Packet), NULL);
+        if (packettype == File) {
+            std::string temp = msg;
+            temp.reserve();
+            int point = temp.find('.');
+            temp = temp.substr(point);
+            int size = temp.size();
+            send(Connection, (char*)&size, sizeof(int), NULL);
+            send(Connection, temp.c_str(), size, NULL);
+        }
         send(Connection, (char*)&msg_size, sizeof(int), NULL);
         send(Connection, msg.c_str(), msg_size, NULL);
     }

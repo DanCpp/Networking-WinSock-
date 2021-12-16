@@ -26,7 +26,7 @@ std::ifstream::pos_type filesize(const char* filename)
     return len;
 }
 
-void FileSend(char* FilePath, int index)
+void FileSend(char* FilePath, int index, char*format, int formatlen)
 {
     std::ifstream in(FilePath, std::ios::binary);
     int sendbuflen = filesize(FilePath);
@@ -37,9 +37,11 @@ void FileSend(char* FilePath, int index)
         in.read(sendbuf, sendbuflen);
         for (int i = 0; i < Counterclients; i++)
         {
-            if (i == index) continue;
+            //if (i == index) continue;
             Packet packet_file = File;
             send(Connections[i], (char*)&packet_file, sizeof(Packet), NULL);
+            send(Connections[i], (char*)&formatlen, sizeof(int), NULL);
+            send(Connections[i], format, formatlen, NULL);
             send(Connections[i], (char*)&sendbuflen, sizeof(int), NULL);
             send(Connections[i], sendbuf, sendbuflen, NULL);
         }
@@ -72,11 +74,15 @@ bool ProcessPacket(int index, Packet packettype)
     }
     case File:
     {
-        int pthlen;
+        int pthlen, sizeformat;
+        recv(Connections[index], (char*)&sizeformat, sizeof(int), NULL);
+        char* format = new char[sizeformat + 1]; format[sizeformat] = '\0';
+        recv(Connections[index], format, sizeformat, NULL);
         recv(Connections[index], (char*)&pthlen, sizeof(int), NULL);
         char* path = new char[pthlen + 1]; path[pthlen] = '\0';
         recv(Connections[index], path, pthlen, NULL);
-        FileSend(path, index);
+        FileSend(path, index, format, sizeformat);
+        delete[] path, format;
         break;
     }
     default:
