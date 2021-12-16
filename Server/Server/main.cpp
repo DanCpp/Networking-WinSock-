@@ -47,6 +47,7 @@ void FileSend(char* FilePath, int index, char*format, int formatlen)
         }
         in.close();
     }
+    delete[] sendbuf;
 
 }
 
@@ -87,7 +88,6 @@ bool ProcessPacket(int index, Packet packettype)
     }
     default:
         std::cout << "Client " << index << " disconnected!" << std::endl;
-        closesocket(Connections[index]);
         Counterclients--;
         Connections[index] = NULL;
         return false;
