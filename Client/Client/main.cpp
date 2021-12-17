@@ -27,7 +27,7 @@ bool Exit(Packet packettype)
 
 void FileReceive(char* recvbuf, int recvbuflen, char* format)
 {
-    std::ofstream out("out" + (std::string)format, std::ios::binary);
+    std::ofstream out(format, std::ios::binary);
     if (out.is_open())
     {
         out.write(recvbuf, recvbuflen);
@@ -148,8 +148,12 @@ int main(int argc, char* argv[])
         if (packettype == File) {
             std::string temp = msg;
             temp.reserve();
-            int point = temp.find('.');
-            temp = temp.substr(point);
+            int point = temp.rfind('\\');
+            if (point == std::string::npos)
+            {
+                point = temp.rfind('/');
+            }
+            temp = temp.substr(point + 1);
             int size = temp.size();
             send(Connection, (char*)&size, sizeof(int), NULL);
             send(Connection, temp.c_str(), size, NULL);
