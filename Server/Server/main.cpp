@@ -6,17 +6,30 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #pragma warning(disable: 4996)
 
-const int COUNTCONN = 100;
+const u_int COUNTCONN = 100;
 
 SOCKET Connections[COUNTCONN];
-int Counterclients = 0;
+u_int Counterclients = 0;
 
 enum Packet
 {
     Message,
     File,
-    EXIT
+    EXIT,
 };
+
+void FatalError(std::string message)
+{
+    throw new std::exception(message.c_str());
+}
+
+void DisconnectClient(int index)
+{
+    std::cout << "Client " << index << " disconnected!" << std::endl;
+    Counterclients--;
+    closesocket(Connections[index]);
+    Connections[index] = NULL;
+}
 
 std::ifstream::pos_type filesize(const char* filename)
 {
@@ -26,7 +39,7 @@ std::ifstream::pos_type filesize(const char* filename)
     return len;
 }
 
-void FileSend(char* FilePath, int index, char*format, int formatlen)
+void FileSend(char* FilePath, int client, char*format, int formatlen)
 {
     std::ifstream in(FilePath, std::ios::binary);
     int sendbuflen = filesize(FilePath);
@@ -37,7 +50,7 @@ void FileSend(char* FilePath, int index, char*format, int formatlen)
         in.read(sendbuf, sendbuflen);
         for (int i = 0; i < Counterclients; i++)
         {
-            //if (i == index) continue;
+            //if (i == client) continue;
             Packet packet_file = File;
             send(Connections[i], (char*)&packet_file, sizeof(Packet), NULL);
             send(Connections[i], (char*)&formatlen, sizeof(int), NULL);
@@ -51,6 +64,18 @@ void FileSend(char* FilePath, int index, char*format, int formatlen)
 
 }
 
+void MessageSend(char* msg, int msg_size, int client)
+{
+    for (int i = 0; i < Counterclients; i++)
+    {
+        if (i == client) continue;
+        Packet packettype = Message;
+        send(Connections[i], (char*)&packettype, sizeof(Packet), NULL);
+        send(Connections[i], (char*)&msg_size, sizeof(int), NULL);
+        send(Connections[i], msg, msg_size, NULL);
+    }
+}
+
 bool ProcessPacket(int index, Packet packettype)
 {
     switch (packettype)
@@ -59,17 +84,9 @@ bool ProcessPacket(int index, Packet packettype)
     {
         int msg_size;
         recv(Connections[index], (char*)&msg_size, sizeof(int), NULL);
-        char* msg = new char[msg_size + 1];
-        msg[msg_size] = '\0';
+        char* msg = new char[msg_size + 1]; msg[msg_size] = '\0';
         recv(Connections[index], msg, msg_size, NULL);
-        for (int i = 0; i < Counterclients; i++)
-        {
-            if (i == index) continue;
-            Packet msg_Packet = Message;
-            send(Connections[i], (char*)&msg_Packet, sizeof(Packet), NULL);
-            send(Connections[i], (char*)&msg_size, sizeof(int), NULL);
-            send(Connections[i], msg, msg_size, NULL);
-        }
+        MessageSend(msg, msg_size, index);
         delete[] msg;
         break;
     }
@@ -87,9 +104,6 @@ bool ProcessPacket(int index, Packet packettype)
         break;
     }
     default:
-        std::cout << "Client " << index << " disconnected!" << std::endl;
-        Counterclients--;
-        Connections[index] = NULL;
         return false;
     }
     return true;
@@ -106,7 +120,7 @@ void ClientHandler(int index)
             break;
         }
     }
-    closesocket(Connections[index]);
+    DisconnectClient(index);
 }
 
 int main(int argc, char* argv[])
@@ -115,7 +129,7 @@ int main(int argc, char* argv[])
     WSAData wsaData;
     WORD DLLVersion = MAKEWORD(2, 1);
     if (WSAStartup(DLLVersion, &wsaData) != 0) {
-        std::cout << "ERROR" << std::endl;
+        FatalError("can not initialize server");
         exit(1);
     }
     SOCKADDR_IN addr;
@@ -133,7 +147,7 @@ int main(int argc, char* argv[])
     {
         newConnection = accept(sListen, (SOCKADDR*)&addr, &size);
         if (newConnection == 0) {
-            std::cout << "Error" << std::endl;
+            FatalError("can not accept new client");
         }
         else
         {

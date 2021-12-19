@@ -15,15 +15,13 @@ enum Packet
 {
     Message,
     File,
-    EXIT,
+    EXIT
 };
 
-bool Exit(Packet packettype)
+void FatalError(std::string message)
 {
-    if (packettype != File and packettype != Message) return true;
-    else return false;
+    throw new std::exception(message.c_str());
 }
-
 
 void FileReceive(char* recvbuf, int recvbuflen, char* format)
 {
@@ -33,6 +31,19 @@ void FileReceive(char* recvbuf, int recvbuflen, char* format)
         out.write(recvbuf, recvbuflen);
     }
     out.close();
+}
+
+void SendFile(std::string msg)
+{
+    int point = msg.rfind('\\');
+    if (point == std::string::npos)
+    {
+        point = msg.rfind('/');
+    }
+    msg = msg.substr(point + 1);
+    int size = msg.size();
+    send(Connection, (char*)&size, sizeof(int), NULL);
+    send(Connection, msg.c_str(), size, NULL);
 }
 
 Packet choicePacket()
@@ -51,6 +62,8 @@ Packet choicePacket()
                 return Message;
             case 'F':
                 return File;
+            default:
+                return EXIT;
             }
         }
     }
@@ -86,7 +99,6 @@ bool ProcessPacket(Packet packettype)
         break;
     }
     default:
-        std::cout << "Unrecognized packet: " << packettype << std::endl;
         return false;
     }
     return true;
@@ -104,6 +116,7 @@ void ClientHandler()
         }
     }
     closesocket(Connection);
+    exit(0);
 }
 
 int main(int argc, char* argv[])
@@ -112,7 +125,7 @@ int main(int argc, char* argv[])
     WSAData wsaData;
     WORD DLLVersion = MAKEWORD(2, 1);
     if (WSAStartup(DLLVersion, &wsaData) != 0) {
-        std::cout << "ERROR" << std::endl;
+        FatalError("can not initialize Client");
         exit(1);
     }
     SOCKADDR_IN addr;
@@ -123,7 +136,7 @@ int main(int argc, char* argv[])
 
     Connection = socket(AF_INET, SOCK_STREAM, NULL);
     if (connect(Connection, (SOCKADDR*)&addr, sizeof(addr)) != 0) {
-        std::cout << "Error: failed connect to server" << std::endl;
+        FatalError("failed connect to server");
         return 1;
     }
     std::cout << "Connected!\n";
@@ -134,29 +147,13 @@ int main(int argc, char* argv[])
     {
         std::cout << "Set packettype 'f' - File; 'm' - Message\n";
         Packet packettype = choicePacket();
+        send(Connection, (char*)&packettype, sizeof(Packet), NULL);
         std::cout << "Your text\n";
         std::string msg;
         std::getline(std::cin, msg);
         int msg_size = msg.size();
-        if (Exit(packettype)) {
-            packettype = EXIT;
-            send(Connection, (char*)&packettype, sizeof(Packet), NULL);
-            closesocket(Connection);
-            exit(0);
-        }
-        send(Connection, (char*)&packettype, sizeof(Packet), NULL);
         if (packettype == File) {
-            std::string temp = msg;
-            temp.reserve();
-            int point = temp.rfind('\\');
-            if (point == std::string::npos)
-            {
-                point = temp.rfind('/');
-            }
-            temp = temp.substr(point + 1);
-            int size = temp.size();
-            send(Connection, (char*)&size, sizeof(int), NULL);
-            send(Connection, temp.c_str(), size, NULL);
+            SendFile(msg);
         }
         send(Connection, (char*)&msg_size, sizeof(int), NULL);
         send(Connection, msg.c_str(), msg_size, NULL);
