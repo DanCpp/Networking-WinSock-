@@ -3,13 +3,14 @@
 #pragma comment(lib, "ws2_32.lib")
 #include <WinSock2.h>
 #include <stdio.h>
+#include <vector>
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #pragma warning(disable: 4996)
 
 const u_int COUNTCONN = 100;
 
 SOCKET Connections[COUNTCONN];
-u_int Counterclients = 0;
+std::vector<u_int> ids_connections;
 
 enum Packet
 {
@@ -23,10 +24,12 @@ void FatalError(std::string message)
     throw new std::exception(message.c_str());
 }
 
-void DisconnectClient(int index)
+void DisconnectClient(u_int index)
 {
     std::cout << "Client " << index << " disconnected!" << std::endl;
-    Counterclients--;
+    auto it = std::find(ids_connections.begin(), ids_connections.end(), index);
+    if (it != ids_connections.end())
+        ids_connections.erase(it);
     closesocket(Connections[index]);
     Connections[index] = NULL;
 }
@@ -48,15 +51,15 @@ void FileSend(char* FilePath, int client, char*format, int formatlen)
     {
         in.seekg(0, std::ios::beg);
         in.read(sendbuf, sendbuflen);
-        for (int i = 0; i < Counterclients; i++)
+        for (auto i = ids_connections.cbegin(); i != ids_connections.cend(); i++)
         {
-            //if (i == client) continue;
+            if (*i == client) continue;
             Packet packet_file = File;
-            send(Connections[i], (char*)&packet_file, sizeof(Packet), NULL);
-            send(Connections[i], (char*)&formatlen, sizeof(int), NULL);
-            send(Connections[i], format, formatlen, NULL);
-            send(Connections[i], (char*)&sendbuflen, sizeof(int), NULL);
-            send(Connections[i], sendbuf, sendbuflen, NULL);
+            send(Connections[*i], (char*)&packet_file, sizeof(Packet), NULL);
+            send(Connections[*i], (char*)&formatlen, sizeof(int), NULL);
+            send(Connections[*i], format, formatlen, NULL);
+            send(Connections[*i], (char*)&sendbuflen, sizeof(int), NULL);
+            send(Connections[*i], sendbuf, sendbuflen, NULL);
         }
         in.close();
     }
@@ -66,13 +69,13 @@ void FileSend(char* FilePath, int client, char*format, int formatlen)
 
 void MessageSend(char* msg, int msg_size, int client)
 {
-    for (int i = 0; i < Counterclients; i++)
+    for (auto i = ids_connections.cbegin(); i != ids_connections.cend(); i++)
     {
-        if (i == client) continue;
+        if (*i == client) continue;
         Packet packettype = Message;
-        send(Connections[i], (char*)&packettype, sizeof(Packet), NULL);
-        send(Connections[i], (char*)&msg_size, sizeof(int), NULL);
-        send(Connections[i], msg, msg_size, NULL);
+        send(Connections[*i], (char*)&packettype, sizeof(Packet), NULL);
+        send(Connections[*i], (char*)&msg_size, sizeof(int), NULL);
+        send(Connections[*i], msg, msg_size, NULL);
     }
 }
 
@@ -82,25 +85,37 @@ bool ProcessPacket(int index, Packet packettype)
     {
     case Message:
     {
-        int msg_size;
-        recv(Connections[index], (char*)&msg_size, sizeof(int), NULL);
-        char* msg = new char[msg_size + 1]; msg[msg_size] = '\0';
-        recv(Connections[index], msg, msg_size, NULL);
-        MessageSend(msg, msg_size, index);
-        delete[] msg;
+        try {
+            int msg_size;
+            recv(Connections[index], (char*)&msg_size, sizeof(int), NULL);
+            char* msg = new char[msg_size + 1]; msg[msg_size] = '\0';
+            recv(Connections[index], msg, msg_size, NULL);
+            MessageSend(msg, msg_size, index);
+            delete[] msg;
+        }
+        catch (std::exception& exc)
+        {
+            return false;
+        }
         break;
     }
     case File:
     {
-        int pthlen, sizeformat;
-        recv(Connections[index], (char*)&sizeformat, sizeof(int), NULL);
-        char* format = new char[sizeformat + 1]; format[sizeformat] = '\0';
-        recv(Connections[index], format, sizeformat, NULL);
-        recv(Connections[index], (char*)&pthlen, sizeof(int), NULL);
-        char* path = new char[pthlen + 1]; path[pthlen] = '\0';
-        recv(Connections[index], path, pthlen, NULL);
-        FileSend(path, index, format, sizeformat);
-        delete[] path, format;
+        try {
+            int pthlen, sizeformat;
+            recv(Connections[index], (char*)&sizeformat, sizeof(int), NULL);
+            char* format = new char[sizeformat + 1]; format[sizeformat] = '\0';
+            recv(Connections[index], format, sizeformat, NULL);
+            recv(Connections[index], (char*)&pthlen, sizeof(int), NULL);
+            char* path = new char[pthlen + 1]; path[pthlen] = '\0';
+            recv(Connections[index], path, pthlen, NULL);
+            FileSend(path, index, format, sizeformat);
+            delete[] path, format;
+        }
+        catch (std::exception& exc)
+        {
+            return false;
+        }
         break;
     }
     default:
@@ -153,7 +168,7 @@ int main(int argc, char* argv[])
         {
             std::cout << "Client Connected!" << std::endl;
             Connections[i] = newConnection;
-            Counterclients++;
+            ids_connections.push_back(i);
             CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)ClientHandler, (LPVOID)(i), NULL, NULL);
         }
     }

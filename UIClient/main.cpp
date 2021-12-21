@@ -17,18 +17,19 @@ TForm1 *Form1;
 
 SOCKET Connection;
 
+const int LeftOthers = 0;
+int y = 0;
+
 enum Packet
 {
     Message,
     File,
     EXIT
 };
-
 void FatalError(std::string message)
 {
     throw new std::exception(message.c_str());
 }
-
 void FileReceive(char* recvbuf, int recvbuflen, char* format)
 {
     std::ofstream out(format, std::ios::binary);
@@ -38,7 +39,6 @@ void FileReceive(char* recvbuf, int recvbuflen, char* format)
     }
 	out.close();
 }
-
 void SendFile(std::string msg)
 {
     int point = msg.rfind('\\');
@@ -52,7 +52,6 @@ void SendFile(std::string msg)
 	send(Connection, msg.c_str(), size, NULL);
 }
 
-
 bool ProcessPacket(Packet packettype)
 {
     switch (packettype)
@@ -65,7 +64,8 @@ bool ProcessPacket(Packet packettype)
         msg[msg_size] = '\0';
 		recv(Connection, msg, msg_size, NULL);
 		//here will be creating label with message
-        std::cout << msg << std::endl;
+		Form1->CreateLabel(LeftOthers, y, Form1->CharToUString(msg, msg_size));
+        y+=23;
         delete[] msg;
         break;
     }
@@ -88,32 +88,79 @@ bool ProcessPacket(Packet packettype)
     }
     return true;
 }
-
 void ClientHandler()
 {
     Packet packettype;
-    while (true)
-    {
-        recv(Connection, (char*)&packettype, sizeof(Packet), NULL);
-        if (!ProcessPacket(packettype))
-        {
-            break;
-        }
-    }
-    closesocket(Connection);
-    exit(0);
+	recv(Connection, (char*)&packettype, sizeof(Packet), NULL);
+	if (!ProcessPacket(packettype))
+	{
+		closesocket(Connection);
+		exit(0);
+	}
+
 }
 
 void TForm1::CreateLabel(int x, int y, UnicodeString caption)
 {
-    //Do create label
+	//Creating label with mrssage
+	TLabel* label = new TLabel(this);
+	label->Parent = this;
+	label->Caption = caption;
+	label->Left = x;
+	label->Top = y;
+	label->Font->Color = clBlue;
+    label->Font->Size = 20;
 }
 
 //---------------------------------------------------------------------------
 __fastcall TForm1::TForm1(TComponent* Owner)
 	: TForm(Owner)
 {
+    WSAData wsaData;
+    WORD DLLVersion = MAKEWORD(2, 1);
+    if (WSAStartup(DLLVersion, &wsaData) != 0) {
+        FatalError("can not initialize Client");
+        exit(1);
+    }
+    SOCKADDR_IN addr;
+    int size = sizeof(addr);
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_port = htons(1111);
+    addr.sin_family = AF_INET;
+
+    Connection = socket(AF_INET, SOCK_STREAM, NULL);
+    if (connect(Connection, (SOCKADDR*)&addr, sizeof(addr)) != 0) {
+        FatalError("failed connect to server");
+        exit(1);
+    }
+    std::cout << "Connected!\n";
+
+    CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)ClientHandler, NULL, NULL, NULL);
 	//Need to create main form
-	CreateLabel(50, 50, "hello");
+    //ClientWidth - 5 * 5 or ClientWidth - sizeof(symbol) * msg.size();
 }
 //---------------------------------------------------------------------------
+
+void __fastcall TForm1::BSMsgClick(TObject *Sender)
+{
+	if(!MsgBox->Text.Length()) return;
+	CreateLabel(ClientWidth - 15 * MsgBox->Text.Length(), y, MsgBox->Text);
+	y+=23;
+	Packet packettype = Message;
+	int len = MsgBox->Text.Length();
+	send(Connection, (char*)&packettype, sizeof(Packet), NULL);
+	send(Connection, (char*)&len, sizeof(int), NULL);
+	send(Connection, (char*)MsgBox->Text.c_str(), len, NULL);
+	MsgBox->Text = "";
+}
+//---------------------------------------------------------------------------
+UnicodeString TForm1::CharToUString(char* str, int size)
+{
+	UnicodeString result;
+	for(int i = 0; i < size; i++)
+	{
+		result.Insert(str[i], i);
+	}
+    return result;
+}
+
