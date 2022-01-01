@@ -17,6 +17,7 @@ enum Packet
     Message,
     File,
     EXIT,
+    REFUSAL,
 };
 
 void FatalError(std::string message)
@@ -34,7 +35,7 @@ void DisconnectClient(u_int index)
     Connections[index] = NULL;
 }
 
-std::ifstream::pos_type filesize(const char* filename)
+std::ifstream::pos_type filesize(const std::string filename)
 {
     std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
     std::ifstream::pos_type len = in.tellg();
@@ -42,7 +43,7 @@ std::ifstream::pos_type filesize(const char* filename)
     return len;
 }
 
-void FileSend(char* FilePath, int client, char*format, int formatlen)
+void FileSend(std::string FilePath, int client, char*format, int formatlen)
 {
     std::ifstream in(FilePath, std::ios::binary);
     int sendbuflen = filesize(FilePath);
@@ -63,8 +64,19 @@ void FileSend(char* FilePath, int client, char*format, int formatlen)
         }
         in.close();
     }
-    delete[] sendbuf;
+    else throw new std::exception("something goes wrong");
+    delete[] sendbuf, format;
 
+}
+
+void FileReceive(char* recvbuf, int recvbuflen, char* filename)
+{
+    std::ofstream out(filename, std::ios::binary);
+    if (out.is_open())
+    {
+        out.write(recvbuf, recvbuflen);
+    }
+    out.close();
 }
 
 void MessageSend(char* msg, int msg_size, int client)
@@ -102,15 +114,17 @@ bool ProcessPacket(int index, Packet packettype)
     case File:
     {
         try {
-            int pthlen, sizeformat;
-            recv(Connections[index], (char*)&sizeformat, sizeof(int), NULL);
-            char* format = new char[sizeformat + 1]; format[sizeformat] = '\0';
-            recv(Connections[index], format, sizeformat, NULL);
-            recv(Connections[index], (char*)&pthlen, sizeof(int), NULL);
-            char* path = new char[pthlen + 1]; path[pthlen] = '\0';
-            recv(Connections[index], path, pthlen, NULL);
-            FileSend(path, index, format, sizeformat);
-            delete[] path, format;
+            int filenamelen, filesize;
+            recv(Connections[index], (char*)&filesize, sizeof(int), NULL);//2
+            char* file = new char[filesize + 1]; file[filesize] = '\0';
+            recv(Connections[index], file, filesize, NULL);//2
+            recv(Connections[index], (char*)&filenamelen, sizeof(int), NULL);//3
+            char* filename = new char[filenamelen + 1]; filename[filenamelen] = '\0';
+            recv(Connections[index], filename, filenamelen, NULL);//3
+            FileReceive(file, filesize, filename);
+            FileSend((std::string)filename, index, file, filesize);
+            remove(filename);
+            delete[] file;
         }
         catch (std::exception& exc)
         {
@@ -129,7 +143,7 @@ void ClientHandler(int index)
     Packet packettype;
     while (true)
     {
-        recv(Connections[index], (char*)&packettype, sizeof(Packet), NULL);
+        recv(Connections[index], (char*)&packettype, sizeof(Packet), NULL); // 1
         if (!ProcessPacket(index, packettype))
         {
             break;

@@ -23,6 +23,32 @@ void FatalError(std::string message)
     throw new std::exception(message.c_str());
 }
 
+std::ifstream::pos_type filesize(const std::string filename)
+{
+    std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
+    std::ifstream::pos_type len = in.tellg();
+    in.close();
+    return len;
+}
+
+void FileSend(std::string FilePath)
+{
+    std::ifstream in(FilePath, std::ios::binary);
+    int sendbuflen = filesize(FilePath);
+    char* sendbuf = new char[sendbuflen + 1];
+    if (in.is_open())
+    {
+        in.seekg(0, std::ios::beg);
+        in.read(sendbuf, sendbuflen);
+        send(Connection, (char*)&sendbuflen, sizeof(int), NULL); //2
+        send(Connection, sendbuf, sendbuflen, NULL);//2
+        in.close();
+    }
+    else throw new std::exception("Cannot find file at your path");
+    delete[] sendbuf;
+
+}
+
 void FileReceive(char* recvbuf, int recvbuflen, char* format)
 {
     std::ofstream out(format, std::ios::binary);
@@ -33,17 +59,15 @@ void FileReceive(char* recvbuf, int recvbuflen, char* format)
     out.close();
 }
 
-void SendFile(std::string msg)
+void SendFile(std::string& msg)
 {
     int point = msg.rfind('\\');
     if (point == std::string::npos)
     {
         point = msg.rfind('/');
     }
+    FileSend(msg);
     msg = msg.substr(point + 1);
-    int size = msg.size();
-    send(Connection, (char*)&size, sizeof(int), NULL);
-    send(Connection, msg.c_str(), size, NULL);
 }
 
 Packet choicePacket()
@@ -147,16 +171,17 @@ int main(int argc, char* argv[])
     {
         std::cout << "Set packettype 'f' - File; 'm' - Message\n";
         Packet packettype = choicePacket();
-        send(Connection, (char*)&packettype, sizeof(Packet), NULL);
+        send(Connection, (char*)&packettype, sizeof(Packet), NULL); // 1
         std::cout << "Your text\n";
         std::string msg;
         std::getline(std::cin, msg);
         int msg_size = msg.size();
         if (packettype == File) {
             SendFile(msg);
+            int msg_size = msg.size();
         }
-        send(Connection, (char*)&msg_size, sizeof(int), NULL);
-        send(Connection, msg.c_str(), msg_size, NULL);
+        send(Connection, (char*)&msg_size, sizeof(int), NULL);//3
+        send(Connection, msg.c_str(), msg_size, NULL);//3
     }
     if (Connection) closesocket(Connection);
     WSACleanup();
