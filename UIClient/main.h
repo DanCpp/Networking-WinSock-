@@ -19,7 +19,7 @@ private:	// User declarations
 public:		// User declarations
 	__fastcall TForm1(TComponent* Owner);
 	void CreateLabel(int x, int y, UnicodeString caption);
-	UnicodeString CharToUString(char* str, int size);
+	char* ToChar(UnicodeString str);
 };
 //---------------------------------------------------------------------------
 extern PACKAGE TForm1 *Form1;
