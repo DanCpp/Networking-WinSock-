@@ -34,15 +34,16 @@ void FatalError(std::string message)
 
 std::ifstream::pos_type filesize(const std::string filename)
 {
-    std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
+	std::ifstream in(filename, std::ios_base::ate | std::ios_base::binary);
     std::ifstream::pos_type len = in.tellg();
     in.close();
     return len;
 }
 
-void FileSend(std::string FilePath)
+void FileSend(const char* FilePath)
 {
-    std::ifstream in(FilePath, std::ios::binary);
+ShowMessage(FilePath);
+    std::ifstream in(FilePath, std::ios_base::binary);
     int sendbuflen = filesize(FilePath);
     char* sendbuf = new char[sendbuflen + 1];
     if (in.is_open())
@@ -70,13 +71,18 @@ void FileReceive(char* recvbuf, int recvbuflen, char* format)
 
 void SendFile(std::string& msg)
 {
-    int point = msg.rfind('\\');
+	int point = msg.rfind('\\');
     if (point == std::string::npos)
     {
         point = msg.rfind('/');
-    }
-    FileSend(msg);
-    msg = msg.substr(point + 1);
+	}
+	ShowMessage("here");
+    FileSend(msg.c_str());
+	msg = msg.substr(point + 1);
+	int len = msg.size();
+	send(Connection, (char*)&len, sizeof(int), NULL);
+	send(Connection, msg.c_str(), len, NULL);
+    ShowMessage("here");
 }
 
 bool ProcessPacket(Packet packettype)
@@ -106,6 +112,8 @@ bool ProcessPacket(Packet packettype)
 		char* recvbuf = new char[recvbuflen + 1]; recvbuf[recvbuflen] = '\0';
 		recv(Connection, recvbuf, recvbuflen, NULL);
 		FileReceive(recvbuf, recvbuflen, format);
+		Form1->CreateLabel(LeftOthers, y, "you recieved a file");
+        y+=23;
         delete[] recvbuf, format;
         break;
     }
@@ -195,4 +203,17 @@ char* TForm1::ToChar(UnicodeString str)
 	}
     return res;
 }
+
+
+void __fastcall TForm1::BSFileClick(TObject *Sender)
+{
+	if(!OpenDialog1->Execute()) return;
+	Packet packettype = File;
+	send(Connection, (char*)&packettype, sizeof(Packet), NULL);
+	char* filename = ToChar(OpenDialog1->FileName);
+	SendFile((std::string&)filename);
+	CreateLabel( ClientWidth - 15 * OpenDialog1->FileName.Length(), y, "you sent a file");
+    y+=23;
+}
+//---------------------------------------------------------------------------
 
