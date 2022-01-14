@@ -42,8 +42,7 @@ std::ifstream::pos_type filesize(const std::string filename)
 
 void FileSend(const char* FilePath)
 {
-ShowMessage(FilePath);
-    std::ifstream in(FilePath, std::ios_base::binary);
+	std::ifstream in(FilePath, std::ios_base::binary);
     int sendbuflen = filesize(FilePath);
     char* sendbuf = new char[sendbuflen + 1];
     if (in.is_open())
@@ -54,35 +53,37 @@ ShowMessage(FilePath);
         send(Connection, sendbuf, sendbuflen, NULL);//2
         in.close();
     }
-    else throw new std::exception("Cannot find file at your path");
-    delete[] sendbuf;
+    else ShowMessage("Can not open file");
+	delete[] sendbuf;
 
 }
 
 void FileReceive(char* recvbuf, int recvbuflen, char* format)
 {
-    std::ofstream out(format, std::ios::binary);
+	std::string filename(format);
+	filename = "Files/" + filename;
+    ShowMessage(filename.c_str());
+	std::ofstream out(filename, std::ios::binary);
     if (out.is_open())
     {
         out.write(recvbuf, recvbuflen);
-    }
+	}
+    else ShowMessage("Here");
     out.close();
 }
 
-void SendFile(std::string& msg)
+void SendFile(std::string msg)
 {
 	int point = msg.rfind('\\');
     if (point == std::string::npos)
     {
         point = msg.rfind('/');
 	}
-	ShowMessage("here");
     FileSend(msg.c_str());
 	msg = msg.substr(point + 1);
 	int len = msg.size();
 	send(Connection, (char*)&len, sizeof(int), NULL);
 	send(Connection, msg.c_str(), len, NULL);
-    ShowMessage("here");
 }
 
 bool ProcessPacket(Packet packettype)
@@ -128,7 +129,7 @@ void ClientHandler()
     Packet packettype;
     while (true)
     {
-        recv(Connection, (char*)&packettype, sizeof(Packet), NULL);
+		recv(Connection, (char*)&packettype, sizeof(Packet), NULL);
         if (!ProcessPacket(packettype))
         {
             break;
@@ -211,7 +212,7 @@ void __fastcall TForm1::BSFileClick(TObject *Sender)
 	Packet packettype = File;
 	send(Connection, (char*)&packettype, sizeof(Packet), NULL);
 	char* filename = ToChar(OpenDialog1->FileName);
-	SendFile((std::string&)filename);
+	SendFile((std::string)filename);
 	CreateLabel( ClientWidth - 15 * OpenDialog1->FileName.Length(), y, "you sent a file");
     y+=23;
 }
