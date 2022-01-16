@@ -122,7 +122,7 @@ bool ProcessPacket(int index, Packet packettype)
             char* filename = new char[filenamelen + 1]; filename[filenamelen] = '\0';
             recv(Connections[index], filename, filenamelen, NULL);//3
             FileReceive(file, filesize, filename);
-            FileSend((std::string)filename, index, file, filesize);
+            FileSend((std::string)filename, index, filename, filesize);
             remove(filename);
             delete[] file;
         }

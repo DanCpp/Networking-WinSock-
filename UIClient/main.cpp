@@ -60,16 +60,13 @@ void FileSend(const char* FilePath)
 
 void FileReceive(char* recvbuf, int recvbuflen, char* format)
 {
-	std::string filename(format);
-	filename = "Files/" + filename;
-    ShowMessage(filename.c_str());
-	std::ofstream out(filename, std::ios::binary);
+	std::ofstream out(format, std::ios::binary);
     if (out.is_open())
     {
         out.write(recvbuf, recvbuflen);
 	}
-    else ShowMessage("Here");
-    out.close();
+	else throw new std::exception();
+	out.close();
 }
 
 void SendFile(std::string msg)
@@ -79,7 +76,7 @@ void SendFile(std::string msg)
     {
         point = msg.rfind('/');
 	}
-    FileSend(msg.c_str());
+	FileSend(msg.c_str());
 	msg = msg.substr(point + 1);
 	int len = msg.size();
 	send(Connection, (char*)&len, sizeof(int), NULL);
